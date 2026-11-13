@@ -1,3 +1,5 @@
+> **Fork notice:** this is a personal, modified fork of [AienTech/dossier](https://github.com/AienTech/dossier), deployed from `ghcr.io/krishnavalliappan/dossier`. Changes are listed in the commit history against `upstream/main`. Licensed AGPL-3.0, like the original.
+
 <p align="center">
   <img src="src/app/icon.svg" alt="" width="80" height="80">
 </p>
