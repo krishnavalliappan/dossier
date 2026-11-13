@@ -1,4 +1,28 @@
-> **Fork notice:** this is a personal, modified fork of [AienTech/dossier](https://github.com/AienTech/dossier), deployed from `ghcr.io/krishnavalliappan/dossier`. Changes are listed in the commit history against `upstream/main`. Licensed AGPL-3.0, like the original.
+## About this fork
+
+> **Fork notice:** this is a personal, modified fork of [AienTech/dossier](https://github.com/AienTech/dossier), licensed AGPL-3.0 like the original. Everything below the line is the upstream README, left unedited so upstream merges stay conflict-free.
+
+- **Live:** https://agents.tail1e8966.ts.net:8444 (private, Tailscale only)
+- **Image:** `ghcr.io/krishnavalliappan/dossier:main`
+- **Agent instructions:** [AGENTS.md](AGENTS.md)
+
+**Deploy:** merging a PR into `main` is the deploy; there is no manual step.
+
+1. A push to `main` runs the **Image** workflow (`.github/workflows/image.yml`): CI, then a build of `ghcr.io/krishnavalliappan/dossier:main` for amd64 and arm64 (about 15 min).
+2. On the VPS, `dossier-deploy.timer` runs `/home/ubuntu/dossier/deploy.sh` every 5 min.
+3. It pulls the new image, dumps Postgres to `/home/ubuntu/dossier/predeploy/` (last 5 kept) and runs `docker compose up -d app`.
+4. It waits for the Docker health check (`/api/health`). If the app is still unhealthy after 3 min, it rolls back to the previous image and marks the bad build so it's skipped.
+
+**Sync upstream:** on a branch, `git fetch upstream && git merge upstream/main`, then open a PR against `main` on this fork.
+
+### Fork changes vs upstream
+
+| Change | PR |
+| --- | --- |
+| Fork notice in the README | [#1](https://github.com/krishnavalliappan/dossier/pull/1) |
+| "About this fork" section, AGENTS.md and CLAUDE.md | this PR |
+
+---
 
 <p align="center">
   <img src="src/app/icon.svg" alt="" width="80" height="80">
