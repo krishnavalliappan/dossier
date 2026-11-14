@@ -49,3 +49,27 @@ PDF text extracted with pdf.js (content-stream order, as pdftotext reads it; pop
 All: 1 page, no images. Found along the way: CAPS/BAR/BAND headings (`.14em` tracking) come out
 as `E X P E R I E N C E`; ATS order now caps section-heading tracking at `.04em`. Rendered pages
 (modern, console) compared off/on: same layout, headings slightly tighter.
+
+## Step 4 · URL normalization (`src/lib/ext/url.test.ts`)
+
+| Scenario | Result | Fixed along the way |
+|---|---|---|
+| Greenhouse: boards/job-boards/EU hosts, `embed/job_app?for&token`, company site `?gh_jid`, board page | ✅ | |
+| Lever posting vs `/apply`; Ashby posting vs `/application`; their boards | ✅ | Ashby org names with spaces |
+| Workday: locale or not, `/apply/applyManually`, `/details/`, myworkdaysite, site list | ✅ | |
+| SmartRecruiters, LinkedIn view/slug/`currentJobId`, Indeed `jk`/`vjk`/`rc/clk`, Glassdoor `jl` | ✅ | |
+| Every URL of one job → one key; different jobs/tenants → different keys | ✅ | |
+| `mailto:`, `chrome://`, `javascript:`, malformed `%` escapes → null/unknown, never a throw | ✅ | `mailto:` parsed as user@host |
+
+## Step 5 · Tokens (`e2e/ext/tokens-check.ts` on the dev server, plus db tests)
+
+| Scenario | Result | Fixed along the way |
+|---|---|---|
+| Make a token in Settings: shown once, copy button, listed after reload without the token | ✅ | |
+| `/api/ext/ping` with the token → 200 + scopes | ✅ | |
+| `/api/ext/*` with only the session cookie → 401 | ✅ | |
+| App's `/api/pdf` with the token → 401 (cookie routes unchanged) | ✅ | |
+| Revoked token → 401 "make a new one in Settings → Extension & ATS" | ✅ | |
+| Password change → token invalid, flagged "no longer valid" in the list | ✅ | |
+| Missing scope → 403 with a clear message | ✅ | |
+| Light and dark screenshots, existing components only | ✅ | dates used the browser's locale (hydration risk) → app's formatter |

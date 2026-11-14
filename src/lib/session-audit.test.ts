@@ -93,7 +93,8 @@ describe("session checks (E11-5)", () => {
       .filter((file) => !OPEN_ROUTES.has(file))
       .flatMap((file) =>
         exportsOf(read(file))
-          .filter(([, name, wrapper]) => /^(GET|HEAD|POST|PUT|PATCH|DELETE|OPTIONS)$/.test(name) && wrapper !== "route")
+          // Fork: the extension's API is bearer-only through extRoute(), and only there.
+          .filter(([, name, wrapper]) => /^(GET|HEAD|POST|PUT|PATCH|DELETE|OPTIONS)$/.test(name) && wrapper !== "route" && !(wrapper === "extRoute" && file.startsWith("src/app/api/ext/")))
           .map(([line]) => `${file}: ${line}`),
       );
     expect(unchecked).toEqual([]);
