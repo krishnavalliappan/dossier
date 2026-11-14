@@ -17,3 +17,5 @@ import "@/lib/agent/draft";
 import "./score-posting";
 import "@/lib/startups/refresh";
 import "@/lib/connector/draft";
+// Fork: the browser extension's "Save and tailor".
+import "@/lib/ext/tailor-job";

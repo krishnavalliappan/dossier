@@ -73,3 +73,23 @@ as `E X P E R I E N C E`; ATS order now caps section-heading tracking at `.04em`
 | Password change → token invalid, flagged "no longer valid" in the list | ✅ | |
 | Missing scope → 403 with a clear message | ✅ | |
 | Light and dark screenshots, existing components only | ✅ | dates used the browser's locale (hydration risk) → app's formatter |
+
+## Step 6: save + lookup API (`feat/ext-api`)
+
+Live run against the dev server with a fake AI (`e2e/ext/api-check.ts`), demo profile.
+
+| Scenario | Result | Fixed along the way |
+|---|---|---|
+| Lookup before saving: no match, page read as a Greenhouse posting | ✅ | |
+| Save with tailoring: 201, Draft, tailoring started | ✅ | |
+| Same job saved again (two at once included, db test) → same application | ✅ | P2002 race handled |
+| List page refused with a clear message | ✅ | |
+| Resume asked for before it's written → 409 not-ready | ✅ | |
+| Resume and letter written in the background | ✅ | |
+| resume.pdf: 200, application/pdf, sane size, named with the company | ✅ | |
+| resume.pdf is one page, Experience first | ✅ | Tailored resumes ran to 2 pages: `/print/resume/:id?fit=n` squeezes a step at a time as Fit to one page does |
+| cover-letter.pdf: 200 | ✅ | |
+| Lookup from the apply form (Greenhouse embed) and from the LinkedIn page it was found on | ✅ | |
+| Mark applied: Draft → Sent, once; one further along left alone | ✅ | Never moves a later status back |
+| Job saved again after its application was deleted | ✅ | Orphan links released |
+| Unknown application 404, garbage body 400, with messages | ✅ | |

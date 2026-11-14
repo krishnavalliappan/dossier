@@ -1113,3 +1113,20 @@ model ExtToken {
   revokedAt  DateTime?
   createdAt  DateTime  @default(now())
 }
+
+/// A job URL the extension knows for an application: the posting it was saved
+/// from, the page it was found on, or an application form linked to it later.
+/// `key` is jobKey(url) (src/lib/ext/url.ts), unique, so saving the same job
+/// twice finds the first application. Deleted with the application by the
+/// lookup (no relation, to leave the upstream Application model untouched).
+model ExtJobUrl {
+  id            String   @id @default(cuid())
+  applicationId String
+  key           String   @unique
+  url           String
+  /// "posting", "source" or "form".
+  role          String
+  createdAt     DateTime @default(now())
+
+  @@index([applicationId])
+}
