@@ -13,6 +13,8 @@ vi.mock("@/lib/profile-data", async () => {
   return { loadProfile: async () => demoProfile() };
 });
 vi.mock("@/lib/settings-data", () => ({ loadSettings: async () => ({ resumeSections: { order: [], off: [] } }) }));
+// Fork: no bullet bank in these tests.
+vi.mock("@/lib/ext/bank/writing", () => ({ bankWriting: async (profile: unknown) => ({ profile, guard: <T,>(units: T) => units }) }));
 vi.mock("./runner", () => ({ defineJob: <T,>(definition: T) => definition }));
 
 describe("writeDocumentsJob (E7-6)", () => {

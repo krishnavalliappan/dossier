@@ -9,6 +9,7 @@ import { createApplicationFromDocuments } from "@/lib/application-create";
 import { SIGN_OFF_UNIT, unitsSchema, type Extracted, type Match, type Unit } from "@/lib/application-data";
 import { documentLabels } from "@/lib/document-labels";
 import { FRAME_LABELS, isFrameUnit } from "@/lib/letter-frame";
+import { bankWriting } from "@/lib/ext/bank/writing";
 import { loadProfile } from "@/lib/profile-data";
 import { withoutSectionsOff } from "@/lib/resume-sections";
 import { loadSettings } from "@/lib/settings-data";
@@ -123,6 +124,10 @@ export async function saveWrittenApplication(input: WrittenApplication): Promise
   const signOff = english || !input.letter.sign_off.trim() ? TONES[tone].signOff : input.letter.sign_off.trim();
   let resume = resumeUnits(profile, input.resume, documentLabels(details.language));
   let letter = letterUnits(input.letter, signOff);
+  // Fork: DO NOT CLAIM phrases from the bullet bank never reach a document.
+  const bank = await bankWriting(profile, input.posting, details.company);
+  resume = bank.guard(resume);
+  letter = bank.guard(letter);
   if (settings.strict) {
     const facts = input.note.trim() ? [input.note.trim()] : [];
     const sources = guardSources(profile, extracted, input.posting, facts);

@@ -12,6 +12,7 @@ import { extractedOf, matchSchema, type Unit } from "@/lib/application-data";
 import { documentLabels } from "@/lib/document-labels";
 import { documentLanguage } from "@/lib/document-language";
 import { saveVersion } from "@/lib/document-versions";
+import { bankWriting } from "@/lib/ext/bank/writing";
 import { newFrame, withFrame } from "@/lib/letter-frame";
 import { prisma } from "@/lib/prisma";
 import { loadFactTexts, loadProfile } from "@/lib/profile-data";
@@ -49,8 +50,10 @@ export const writeDocumentJob = defineJob({
     ]);
     // Its own sections when it has them, or the base resume's (#297).
     const sections = sectionLayoutSchema.safeParse(application.sections);
-    const profile = withoutSectionsOff(fullProfile, sections.success ? sections.data : settings.resumeSections);
     const extracted = extractedOf(application);
+    // Fork: the bank's wording for this posting, and its DO NOT CLAIM guard.
+    const bank = await bankWriting(withoutSectionsOff(fullProfile, sections.success ? sections.data : settings.resumeSections), application.postingText, application.company);
+    const profile = bank.profile;
     const parsedMatch = matchSchema.safeParse(application.match);
     const match = parsedMatch.success ? parsedMatch.data : { items: [] };
     const posting = application.postingText;
@@ -61,14 +64,14 @@ export const writeDocumentJob = defineJob({
     let writtenWith: string;
     if (kind === DocumentKind.RESUME) {
       const resume = await tailorResume(provider, { profile, extracted, match, facts, posting, keepSkillOrder: settings.skillOrder === "manual" }, taskOptions);
-      units = resume.data;
+      units = bank.guard(resume.data);
       writtenWith = resume.promptVersion;
     } else {
       const letter = await writeCoverLetter(provider, { profile, extracted, match, tone: application.tone, facts, posting }, taskOptions);
       const language = application.language || settings.docLanguage || extracted.language || "English";
       // The sender and signature from the profile, and today's date, as a new application's letter has (E8-11).
       units = withFrame(
-        letter.data,
+        bank.guard(letter.data),
         newFrame({
           basics: profile.basics,
           company: application.company,
