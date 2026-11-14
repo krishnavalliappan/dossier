@@ -1065,3 +1065,35 @@ model AiUsage {
 
   @@index([createdAt])
 }
+
+// ─── Fork: bullet bank (src/lib/ext/bank) ────────────────────────────────────
+// Fork-only. No relations to upstream models, so upstream merges stay clean:
+// the importer keeps `targetId` in step with the role or project it fills.
+
+/// An APPROVED bullet from the bullet bank, one row per variant.
+model BankBullet {
+  /// The bank's id with its variant suffix, e.g. "D1-N".
+  id         String   @id
+  /// The id without the variant suffix, e.g. "D1": a bullet's variants share it.
+  baseId     String
+  /// "neutral" (the default wording) or "healthcare" (healthtech postings only).
+  variant    String
+  /// "experience" or "project".
+  targetKind String
+  /// The Experience or Project id the bullet belongs to.
+  targetId   String
+  text       String
+  /// "VERIFIED", "STRETCH" or "IN_PROGRESS".
+  tier       String   @default("")
+  /// Its place in the bank, which is the order on the profile.
+  sort       Int      @default(0)
+  updatedAt  DateTime @updatedAt
+
+  @@index([targetId])
+}
+
+/// A phrase from the bank's DO NOT CLAIM list: never allowed in a document.
+model BankClaimBlock {
+  phrase    String   @id
+  createdAt DateTime @default(now())
+}
