@@ -7,6 +7,7 @@ import { getAiProvider } from "@/lib/ai";
 import { loadTaskOptions } from "@/lib/ai/task-options";
 import { tailorResume, writeCoverLetter } from "@/lib/ai/tasks";
 import { extractedSchema, matchSchema, unitsSchema } from "@/lib/application-data";
+import { bankWriting } from "@/lib/ext/bank/writing";
 import { loadProfile } from "@/lib/profile-data";
 import { withoutSectionsOff } from "@/lib/resume-sections";
 import { DOCUMENTS_TO_WRITE } from "@/lib/settings";
@@ -42,7 +43,9 @@ export const writeDocumentsJob = defineJob({
     await step(write === "letter" ? WRITE_DOCUMENTS_STEPS[1] : WRITE_DOCUMENTS_STEPS[0]);
     const [provider, options, fullProfile, settings] = await Promise.all([getAiProvider(), loadTaskOptions(), loadProfile(), loadSettings()]);
     // A section that's off on the base resume isn't written about (#297).
-    const profile = withoutSectionsOff(fullProfile, settings.resumeSections);
+    // Fork: the bank's wording for this posting, and its DO NOT CLAIM guard.
+    const bank = await bankWriting(withoutSectionsOff(fullProfile, settings.resumeSections), posting, extracted.company ?? "");
+    const profile = bank.profile;
     // "Anything I should know?" is the application's first fact (APP-15).
     const facts = note.trim() ? [note.trim()] : [];
     const skipped = { data: [], promptVersion: "" };
@@ -55,7 +58,7 @@ export const writeDocumentsJob = defineJob({
     if (write === "both") await step(WRITE_DOCUMENTS_STEPS[1]);
     const letter = write === "resume" ? skipped : await writeCoverLetter(provider, { profile, extracted, match, tone, facts, posting }, { ...options, signal });
 
-    return { resume: resume.data, resumeWith: resume.promptVersion, letter: letter.data, letterWith: letter.promptVersion };
+    return { resume: bank.guard(resume.data), resumeWith: resume.promptVersion, letter: bank.guard(letter.data), letterWith: letter.promptVersion };
   },
 });
 

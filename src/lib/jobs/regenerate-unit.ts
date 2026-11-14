@@ -6,6 +6,7 @@ import { DocumentKind, VersionCause } from "@/generated/prisma/enums";
 import { getAiProvider } from "@/lib/ai";
 import { loadTaskOptions } from "@/lib/ai/task-options";
 import { regenerateUnit } from "@/lib/ai/tasks";
+import { bankWriting } from "@/lib/ext/bank/writing";
 import { extractedOf, unitSchema, unitsSchema } from "@/lib/application-data";
 import { updateDocuments } from "@/lib/document-units";
 import { withoutPrivateParts } from "@/lib/letter-frame";
@@ -48,7 +49,10 @@ export const regenerateUnitJob = defineJob({
     const unit = units?.find((entry) => entry.id === unitId);
     if (!application || !units || !unit || unit.text !== from) return { outcome: "changed" as const };
 
-    const [provider, options, profile, facts] = await Promise.all([getAiProvider(), loadTaskOptions(), profileOfApplication(application.frozen), loadFactTexts(applicationId)]);
+    const [provider, options, frozenProfile, facts] = await Promise.all([getAiProvider(), loadTaskOptions(), profileOfApplication(application.frozen), loadFactTexts(applicationId)]);
+    // Fork: the bank's wording for this posting, and its DO NOT CLAIM guard.
+    const bank = await bankWriting(frozenProfile, application.postingText, application.company);
+    const profile = bank.profile;
     const { data } = await regenerateUnit(
       provider,
       {
@@ -70,7 +74,7 @@ export const regenerateUnitJob = defineJob({
       const current = documents[document]?.find((entry) => entry.id === unitId);
       if (!current || current.text !== from) return { outcome: "changed" as const };
       const previous = { ...current };
-      current.text = data.text;
+      current.text = bank.guard([{ ...current, text: data.text }])[0].text;
       if (data.unverified?.length) current.unverified = data.unverified;
       else delete current.unverified;
       return { outcome: "rewritten" as const, previous, unit: { ...current } };
