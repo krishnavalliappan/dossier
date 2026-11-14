@@ -7,6 +7,8 @@ export const SETTINGS_SECTIONS = [
   { id: "documents", label: "Documents" },
   { id: "google", label: "Google" },
   { id: "connector", label: "MCP connector" },
+  // Fork: the browser extension, its tokens, ATS reading order and the bullet bank.
+  { id: "extension", label: "Extension & ATS" },
   { id: "data", label: "Your data" },
   { id: "about", label: "About" },
 ] as const;

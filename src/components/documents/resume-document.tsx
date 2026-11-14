@@ -28,6 +28,8 @@ type ResumeDocumentProps = ResumeOptions & {
   renderUnit?: UnitRenderer;
   /** How far the spacing and type are squeezed to fit one page (public issue 69); 0 for the theme as it is. */
   fit?: number;
+  /** Fork: the main column first in reading order (for ATS parsers), drawn where the theme puts it. */
+  atsOrder?: boolean;
 };
 
 /** Enough of a resume's own words to tell its script and direction. */
@@ -49,7 +51,7 @@ const sampleText = (content: ResumeContent) =>
  * Sections without content are left out. Each tailored part is drawn by
  * `renderUnit` with its unit id, for editing it in place (E8-3).
  */
-export function ResumeDocument({ theme, profile, paper, layout, sections = DEFAULT_SECTION_LAYOUT, language, renderUnit = plainUnit, fit = 0, ...options }: ResumeDocumentProps) {
+export function ResumeDocument({ theme, profile, paper, layout, sections = DEFAULT_SECTION_LAYOUT, language, renderUnit = plainUnit, fit = 0, atsOrder = false, ...options }: ResumeDocumentProps) {
   const resolved = resolveTheme(theme, layout, fit);
   const labels = documentLabels(language);
   const content = resumeContent(profile, options, labels);
@@ -265,7 +267,10 @@ export function ResumeDocument({ theme, profile, paper, layout, sections = DEFAU
     ? [[...sidebarTop, ...order.map((key) => drawn[key])]].filter((column) => column.length > 0)
     : resolved.sidebarEnd
       ? [main, sidebar]
-      : [sidebar, main];
+      : atsOrder
+        ? [main, sidebar] // Fork: placed back on the grid by .atsOrder, so only the reading order changes.
+        : [sidebar, main];
+  const atsSwapped = resolved.split && !resolved.sidebarEnd && atsOrder;
   // A tinted sidebar is drawn as a panel, unless there's nothing in it.
   const panel = resolved.tintedSidebar && sidebar.length > 0 ? sidebar : null;
 
@@ -287,7 +292,7 @@ export function ResumeDocument({ theme, profile, paper, layout, sections = DEFAU
         {beside ? <div className={styles.headerText}>{title}</div> : title}
         {position === PhotoPosition.HEADER_END && photo("header")}
       </header>
-      <div className={styles.columns}>
+      <div className={cn(styles.columns, atsOrder && styles.atsText, atsSwapped && styles.atsOrder)}>
         {columns.map((column, index) => (
           <div key={index} className={cn(styles.column, column === panel && styles.sidebarPanel)}>
             {column}

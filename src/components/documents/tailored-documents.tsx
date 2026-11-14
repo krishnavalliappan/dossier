@@ -21,6 +21,7 @@ export function TailoredResume({
   includeReferences,
   sections,
   renderUnit,
+  atsOrder,
 }: {
   resume: DocumentData;
   profile: ProfileData;
@@ -34,6 +35,8 @@ export function TailoredResume({
   /** Its sections' order and which are off (#297). */
   sections: SectionLayout;
   renderUnit?: UnitRenderer;
+  /** Fork: the main column first in reading order (Settings → ATS reading order). */
+  atsOrder?: boolean;
 }) {
   return (
     <ResumeDocument
@@ -47,6 +50,7 @@ export function TailoredResume({
       includeReferences={includeReferences}
       sections={sections}
       renderUnit={renderUnit}
+      atsOrder={atsOrder}
     />
   );
 }

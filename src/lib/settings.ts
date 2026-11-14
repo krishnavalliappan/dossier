@@ -159,6 +159,8 @@ export const settingsSchema = z.object({
   resumeSections: json(sectionLayoutSchema).catch(DEFAULT_SECTION_LAYOUT),
   /** "Fit to one page" on the base resume (public issue 69): spacing, then type, tightened until it fits. */
   fitBaseResume: flag(false),
+  /** Fork: in sidebar layouts, print the main column first so ATS parsers read experience before the sidebar; the look is unchanged. */
+  atsReadingOrder: flag(false),
   /** Why the last nightly backup failed; null once one works again (E10-7). */
   backupProblem: z.string().nullable().catch(null),
   // Job search (E14-4). Null means "not set in the app": DOSSIER_JOBS_SOURCE

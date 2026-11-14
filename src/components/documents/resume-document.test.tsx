@@ -40,6 +40,18 @@ describe("ResumeDocument", () => {
     expect(within(contact).getAllByRole("listitem").map((item) => item.textContent)).toContain("example.com");
   });
 
+  // Fork: Settings → ATS reading order.
+  it("reads the main column first with ATS reading order, drawn where the theme puts it", () => {
+    const { container } = render(<ResumeDocument theme={theme("modern")} profile={profile} paper="A4" today={today} atsOrder />);
+    expect(sectionTitles()).toEqual(["Profile", "Experience", "Projects", "Education", "Certifications", "Publications", "Contact", "Skills", "Languages"]);
+    const columns = screen.getByRole("heading", { name: "Profile" }).closest("section")!.parentElement!.parentElement!;
+    expect(columns.className).toMatch(/atsOrder/);
+    expect(columns.className).toMatch(/atsText/);
+    // A sidebar already at the end of the line, and a single column, keep their order; only the headings' tracking changes.
+    render(<ResumeDocument theme={theme("studio")} profile={profile} paper="A4" today={today} atsOrder />);
+    expect(container.ownerDocument.body.innerHTML.match(/atsOrder/g)).toHaveLength(1);
+  });
+
   it("renders a sidebar theme in a single column when asked", () => {
     render(<ResumeDocument theme={theme("modern")} profile={profile} paper="A4" layout="SINGLE" today={today} />);
     expect(sectionTitles()).toEqual(["Profile", "Experience", "Projects", "Education", "Certifications", "Publications", "Skills", "Languages"]);

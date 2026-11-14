@@ -369,6 +369,31 @@
   color: var(--on-accent);
 }
 
+/*
+ * Fork: ATS reading order. The main column comes first in the DOM, so text
+ * extraction reads it first, and is placed back in the second grid column.
+ * Explicit placement, not `order`, so painting (and the PDF's text) keeps
+ * the DOM order.
+ */
+.split .atsOrder > :nth-child(1) {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.split .atsOrder > :nth-child(2) {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+/*
+ * Fork: widely tracked capitals come out of text extraction as
+ * "E X P E R I E N C E", which parsers don't take for a heading. The
+ * tracking is kept below the point where extractors insert spaces.
+ */
+.atsText .sectionTitle {
+  letter-spacing: min(var(--heading-tracking), 0.04em);
+}
+
 /* The sidebar at the end of the line: on the right, or on the left in right-to-left documents. */
 .sidebarEnd .columns {
   grid-template-columns: minmax(0, 1fr) calc(var(--u) * var(--sidebar-width));

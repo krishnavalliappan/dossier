@@ -37,6 +37,8 @@ import { JobSearchSection } from "./job-search-section";
 import { ScoringSection } from "./scoring-section";
 import { AboutSection, type AboutFacts, type UsagePingView } from "./about-section";
 import { ConnectorSection } from "./connector-section";
+import { extensionSectionProps } from "./ext/data";
+import { ExtensionSection } from "./ext/extension-section";
 import { settingsSectionFromParam } from "./sections";
 import { SettingsScreen } from "./settings-screen";
 
@@ -108,6 +110,8 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
           address={mcpUrl(env.DOSSIER_PUBLIC_URL ?? (await requestOrigin()))}
           inDesktopApp={isDesktopApp()}
         />
+      ) : section === "extension" ? (
+        <ExtensionSection {...await extensionSectionProps(settings)} />
       ) : section === "data" ? (
         <DataSection
           hasApiKey={[settings.apiKeyEnc, settings.jsearchKeyEnc, settings.adzunaKeyEnc].some((key) => key !== null)}
