@@ -40,6 +40,7 @@ export default async function PrintTailoredDocumentPage({ params }: PageProps<"/
           language={application.language}
           includeReferences={includeReferences}
           sections={sections}
+          atsOrder={settings.atsReadingOrder}
         />
       ) : (
         <TailoredLetter

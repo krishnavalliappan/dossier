@@ -32,6 +32,7 @@ describe("stored settings", () => {
       setupGuide: null,
       resumeSections: DEFAULT_SECTION_LAYOUT,
       fitBaseResume: false,
+      atsReadingOrder: false,
       provider: null,
       baseUrl: null,
       model: null,
