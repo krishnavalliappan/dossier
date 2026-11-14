@@ -1,0 +1,27 @@
+<!doctype html>
+<!-- Simulated Greenhouse job with its application form (test only): resume and cover letter fields, a resume another extension attached. -->
+<html lang="en"><head><meta charset="utf-8"><title>Job Application for Backend Developer at Acme Sim</title></head>
+<body><main>
+<h1>Backend Developer</h1><div class="job__location">Toronto, ON</div>
+<div class="job__description"><p>Acme Sim builds logistics software. Responsibilities: design and run backend services in Python. Qualifications: 3+ years of experience. Benefits: health and dental.</p></div>
+<form id="application" data-autosubmit="__AUTOSUBMIT__">
+  <label>First name <input name="first_name"></label>
+  <div class="field-wrapper" data-upload>
+    <div role="group" aria-labelledby="upload-label-resume" class="file-upload">
+      <div id="upload-label-resume" class="label upload-label">Resume/CV<span class="required">*</span></div>
+      <button type="button">Attach</button><label class="visually-hidden" for="resume">Attach</label>
+      <input id="resume" type="file" style="position:absolute;width:1px;height:1px;opacity:0" data-preattached="Simplify-Resume.pdf">
+      <ul class="files"></ul>
+    </div>
+  </div>
+  <div class="field-wrapper" data-upload>
+    <div role="group" aria-labelledby="upload-label-cover_letter" class="file-upload">
+      <div id="upload-label-cover_letter" class="label upload-label">Cover Letter</div>
+      <button type="button">Attach</button><label class="visually-hidden" for="cover_letter">Attach</label>
+      <input id="cover_letter" type="file" style="position:absolute;width:1px;height:1px;opacity:0">
+      <ul class="files"></ul>
+    </div>
+  </div>
+  <button type="submit">Submit application</button>
+</form>
+</main><script src="/__sim/upload-ui.js"></script></body></html>

@@ -117,3 +117,29 @@ Live run against the dev server with a fake AI (`e2e/ext/api-check.ts`), demo pr
 | Live: GitLab (Greenhouse), Palantir (Lever), Linear (Ashby), LinkedIn guest view, GitLab board | ✅ | |
 | Saved from an apply form (no description) → Dossier reads the posting itself when tailoring | ✅ (db test) | |
 | readPage runs injected (no bundler helpers) | ✅ (unit + build check) | tsx's keepNames `__name` would have broken it |
+
+## Step 8: extension, attach (`feat/ext-attach`)
+
+`e2e/ext/attach-check.ts`: the built extension against the dev server, on simulated ATS forms (`e2e/ext/sim/`) at ATS addresses. Demo profile; every request to another site aborted. 26/26. `save-check.ts` still 33/33 on the shared rig.
+
+| Scenario | Result | Fixed along the way |
+|---|---|---|
+| Saved job's form: one main action, Attach resume and cover letter | ✅ | |
+| Replaces a file another extension attached (Simplify), says so; page shows only ours | ✅ | |
+| Cover letter into its own field (Greenhouse labels both "Attach": told apart by group label and id) | ✅ | |
+| Real PDFs: application/pdf, `%PDF-`, ~26 KB, named "Jane Doe – Company – Resume.pdf" | ✅ | |
+| Attach twice → still one file | ✅ | |
+| Then Mark applied (with "submit it yourself" first) → Sent in Dossier | ✅ | |
+| A form that submits itself on change: held back, and said | ✅ | |
+| Greenhouse embedded in a careers page: attached inside the frame (host access asked on click) | ✅ | |
+| Workday form for a job saved from LinkedIn: "Saved it from another page?" → linked → attached | ✅ | Suggestions loaded after the check looked |
+| Workday drop zone: one file, not two (change + drop) | ✅ | |
+| Form a click away: says to open it, Look again finds it | ✅ | Only offered on "form" URLs; now on ATS postings too |
+| LinkedIn: no Attach even with an upload on the page; its upload left empty | ✅ | |
+| Resume being written: Attach disabled with the reason, enabled when ready | ✅ | |
+| Never written: main action Write now | ✅ | |
+| Dossier down while attaching: says so; Try again works once back | ✅ | Rig now simulates a real outage |
+| Nothing but GETs ever left for another site | ✅ | |
+| A busy renderer failing once | ✅ | PDFs fetched one at a time, retried once on a server error ("Still getting the PDF…") |
+
+Note: on `next dev`, Turbopack's cache compaction sometimes held the print page's load past the renderer's 20 s limit (500s in the log). A fresh dev server had none. Production builds don't have this.

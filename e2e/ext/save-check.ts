@@ -10,125 +10,19 @@
 //
 // Screenshots of every popup state, light and dark, go to e2e/ext/out/save/.
 
-import { mkdirSync, readFileSync } from "node:fs";
-import { DatabaseSync } from "node:sqlite";
+import { mkdirSync } from "node:fs";
 
-import { chromium, type BrowserContext, type Page, type Worker } from "playwright-core";
+import { chromium, type Page } from "playwright-core";
 
-import { jobKey } from "../../src/lib/ext/url";
+import { forget, Rig, shot as shotTo } from "./extension";
 import { BASE, makeToken, OUT, scorecard, signIn } from "./support";
 
-const DIST = new URL("../../extension/dist/", import.meta.url).pathname;
-const FIXTURES = new URL("../../src/lib/ext/page/fixtures/", import.meta.url).pathname;
 const SHOTS = `${OUT}save/`;
 mkdirSync(SHOTS, { recursive: true });
 
-const SYNTHETIC: Record<string, string> = {
-  "careers-embed": "https://acme.example/careers/backend-developer",
-  "linkedin-signed-in": "https://www.linkedin.com/jobs/view/3998877665/",
-  itemlist: "https://acme.example/careers",
-};
-const pages = new Map<string, string>();
-function fixtureUrl(name: string): string {
-  const html = readFileSync(`${FIXTURES}${name}.html`, "utf8");
-  const url = /<!-- Trimmed copy of (\S+) /.exec(html)?.[1] ?? SYNTHETIC[name];
-  pages.set(url, html);
-  return url;
-}
-
 const card = scorecard();
 const LIVE = process.env.LIVE === "1";
-
-/** Forgets the jobs these pages are (applications saved by an earlier run), so each run saves them anew. Dev SQLite only. */
-function forget(urls: string[]) {
-  const file = (process.env.DATABASE_URL ?? "").replace(/^file:/, "");
-  if (!file || process.env.DATABASE_URL?.startsWith("postgres")) throw new Error("Set DATABASE_URL to the dev server's SQLite file.");
-  const db = new DatabaseSync(file);
-  db.exec("PRAGMA foreign_keys = ON"); // So an application's documents and jobs go with it.
-  const keys = urls.map(jobKey).filter(Boolean);
-  const marks = keys.map(() => "?").join(", ");
-  const ids = (db.prepare(`SELECT applicationId FROM ExtJobUrl WHERE key IN (${marks})`).all(...keys) as { applicationId: string }[]).map((row) => row.applicationId);
-  if (ids.length) db.prepare(`DELETE FROM Application WHERE id IN (${ids.map(() => "?").join(", ")})`).run(...ids);
-  db.prepare(`DELETE FROM ExtJobUrl WHERE key IN (${marks})`).run(...keys);
-  db.close();
-}
-const backend = new URL(BASE);
-
-async function launch(): Promise<{ context: BrowserContext; worker: Worker; id: string }> {
-  const context = await chromium.launchPersistentContext("", {
-    channel: "chromium",
-    headless: true,
-    args: [`--disable-extensions-except=${DIST}`, `--load-extension=${DIST}`],
-    viewport: { width: 1200, height: 800 },
-  });
-  // Job pages come from the fixtures; Dossier is the dev server; anything else is refused, so nothing is sent anywhere.
-  await context.route("**/*", (route) => {
-    const url = route.request().url();
-    const page = pages.get(url);
-    if (new URL(url).host === backend.host || url.startsWith("chrome-extension://")) return route.continue();
-    // Live: the real pages, read only. Anything but a GET to them (a form post) is refused.
-    if (LIVE && route.request().method() === "GET" && !page) return route.continue();
-    if (page && route.request().method() === "GET") return route.fulfill({ status: 200, contentType: "text/html; charset=utf-8", body: page });
-    return route.abort("blockedbyclient");
-  });
-  const worker = context.serviceWorkers()[0] ?? (await context.waitForEvent("serviceworker"));
-  const id = new URL(worker.url()).host;
-  // Installing opens Options, to connect: once, then out of the way.
-  // (Chrome may open it in the tab it started with, a moment later: wait for it before opening anything else.)
-  let options: Page | undefined;
-  for (let i = 0; i < 40 && !options; i++) {
-    options = context.pages().find((page) => page.url().includes("/options.html"));
-    if (!options) await new Promise((resolve) => setTimeout(resolve, 250));
-  }
-  card.check("installing opens Options to connect", options !== undefined);
-  await options?.close();
-  return { context, worker, id };
-}
-
-async function tabIdOf(worker: Worker, url: string): Promise<number> {
-  return worker.evaluate(async (wanted) => {
-    const { chrome } = globalThis as unknown as { chrome: { tabs: { query(q: object): Promise<{ id: number; url: string }[]> } } };
-    return (await chrome.tabs.query({})).find((tab) => tab.url === wanted)?.id ?? -1;
-  }, url);
-}
-
-async function badgeOf(worker: Worker, tabId: number): Promise<string> {
-  return worker.evaluate(async (id) => {
-    const { chrome } = globalThis as unknown as { chrome: { action: { getBadgeText(d: object): Promise<string> } } };
-    return chrome.action.getBadgeText({ tabId: id });
-  }, tabId);
-}
-
-/** Opens the page, then the popup for its tab (a tab of its own, 360px wide as the real popup is). */
-async function popupFor(context: BrowserContext, worker: Worker, id: string, url: string, scheme: "light" | "dark" = "light"): Promise<{ page: Page; popup: Page; tabId: number }> {
-  const page = await context.newPage();
-  await page.goto(url);
-  const tabId = await tabIdOf(worker, page.url());
-  const popup = await context.newPage();
-  await popup.setViewportSize({ width: 360, height: 560 });
-  await popup.emulateMedia({ colorScheme: scheme });
-  await popup.goto(`chrome-extension://${id}/popup.html?tab=${tabId}`);
-  await popup.locator("main").waitFor();
-  await popup.waitForFunction(() => !document.querySelector(".spinner"), undefined, { timeout: 20_000 });
-  return { page, popup, tabId };
-}
-
-async function shot(popup: Page, name: string) {
-  // The popup is as tall as what's in it.
-  await popup.locator("#app").screenshot({ path: `${SHOTS}${name}.png` });
-}
-
-async function connect(context: BrowserContext, id: string, server: string, token: string): Promise<string> {
-  const options = await context.newPage();
-  await options.goto(`chrome-extension://${id}/options.html`);
-  await options.getByLabel("Dossier's address").fill(server);
-  await options.getByLabel("Token").fill(token);
-  await options.getByRole("button", { name: /Connect|Save and check/ }).click();
-  await options.waitForFunction(() => !/Checking/.test(document.getElementById("status")?.textContent ?? ""), undefined, { timeout: 20_000 });
-  const status = (await options.locator("#status").textContent()) ?? "";
-  await options.close();
-  return status;
-}
+const shot = (popup: Page, name: string) => shotTo(popup, `${SHOTS}${name}.png`);
 
 async function main() {
   const signedIn = await chromium.launch();
@@ -136,12 +30,15 @@ async function main() {
   await signIn(app);
   const token = await makeToken(app, `Save check ${Date.now()}`);
 
+  const rig = await Rig.launch({ live: LIVE });
+  const { context, id } = rig;
+  const fixtureUrl = (name: string) => rig.fixture(name);
   forget(["greenhouse-posting", "lever-posting", "linkedin-signed-in", "linkedin-view", "careers-embed", "ashby-posting", "not-a-job"].map(fixtureUrl));
-  const { context, worker, id } = await launch();
+  card.check("installing opens Options to connect", rig.openedOptions);
 
   // Not connected yet.
   {
-    const { popup, page } = await popupFor(context, worker, id, fixtureUrl("greenhouse-posting"));
+    const { popup, page } = await rig.open(fixtureUrl("greenhouse-posting"));
     card.check("not connected: says so, one button to connect", (await popup.getByRole("button", { name: "Connect to Dossier" }).count()) === 1);
     await shot(popup, "01-not-connected");
     await Promise.all([popup.close(), page.close()]);
@@ -162,7 +59,7 @@ async function main() {
     await options.screenshot({ path: `${SHOTS}02-options-error.png`, fullPage: true });
     await options.close();
   }
-  const connected = await connect(context, id, `${BASE}/some/path`, token);
+  const connected = await rig.connect(`${BASE}/some/path`, token);
   card.check("options: connects, and says what the token can do", /Connected to Dossier .* look up saved jobs, save jobs and mark them applied, download tailored PDFs/.test(connected), connected);
   {
     const options = await context.newPage();
@@ -179,8 +76,8 @@ async function main() {
   // A Greenhouse posting with its form: details read, saved with tailoring, then shown as saved.
   const greenhouse = fixtureUrl("greenhouse-posting");
   {
-    const { popup, page, tabId } = await popupFor(context, worker, id, greenhouse);
-    card.check("badge before saving: + (a job to save)", (await badgeOf(worker, tabId)) === "+", await badgeOf(worker, tabId));
+    const { popup, page, tabId } = await rig.open(greenhouse);
+    card.check("badge before saving: + (a job to save)", (await rig.badgeOf(tabId)) === "+", await rig.badgeOf(tabId));
     card.check("Greenhouse posting: says what the page is", (await popup.locator("#what").textContent()) === "Greenhouse · Application form", (await popup.locator("#what").textContent()) ?? "");
     const fields = { title: await popup.getByLabel("Job title").inputValue(), company: await popup.getByLabel("Company").inputValue(), location: await popup.getByLabel("Location").inputValue() };
     card.check("Greenhouse posting: title, company and location read from the page", fields.title === "AI Transformation Owner, CRO" && fields.company === "GitLab" && fields.location === "Remote, United States", JSON.stringify(fields));
@@ -201,39 +98,39 @@ async function main() {
     await shot(popup, "06-saved-ready-dark");
     await page.reload();
     await page.waitForTimeout(1500);
-    card.check("badge after saving: ✓", (await badgeOf(worker, tabId)) === "✓", await badgeOf(worker, tabId));
+    card.check("badge after saving: ✓", (await rig.badgeOf(tabId)) === "✓", await rig.badgeOf(tabId));
     await Promise.all([popup.close(), page.close()]);
   }
 
   // The same job again: found, not saved twice.
   {
-    const { popup, page } = await popupFor(context, worker, id, greenhouse);
+    const { popup, page } = await rig.open(greenhouse);
     card.check("same job again: shown as saved, no second save", (await popup.getByRole("button", { name: "Open in Dossier" }).count()) === 1 && (await popup.getByRole("button", { name: "Save to Dossier" }).count()) === 0);
     await Promise.all([popup.close(), page.close()]);
   }
 
   // Lever: saved from its posting without tailoring; its /apply form then finds it.
   {
-    const { popup, page } = await popupFor(context, worker, id, fixtureUrl("lever-posting"));
+    const { popup, page } = await rig.open(fixtureUrl("lever-posting"));
     await popup.getByLabel("Write the resume and cover letter now").uncheck();
     await popup.getByRole("button", { name: "Save to Dossier" }).click();
     await popup.getByText("Saved as a Draft.").waitFor({ timeout: 20_000 });
     card.check("saved without tailoring: says no resume yet, offers to write it", (await popup.getByText("No resume yet").count()) === 1 && (await popup.getByRole("button", { name: "Write now" }).count()) === 1);
     await shot(popup, "07-saved-no-tailor");
     await Promise.all([popup.close(), page.close()]);
-    const form = await popupFor(context, worker, id, fixtureUrl("lever-apply"));
+    const form = await rig.open(fixtureUrl("lever-apply"));
     card.check("Lever /apply finds the job saved from its posting", (await form.popup.locator("#what").textContent()) === "Lever · Application form" && (await form.popup.getByText("Administrative Business Partner").count()) === 1);
-    card.check("badge on a saved job's application form: ⇪", (await badgeOf(worker, form.tabId)) === "⇪", await badgeOf(worker, form.tabId));
+    card.check("badge on a saved job's application form: ⇪", (await rig.badgeOf(form.tabId)) === "⇪", await rig.badgeOf(form.tabId));
     await Promise.all([form.popup.close(), form.page.close()]);
   }
 
   // LinkedIn: the company's own posting when Apply links to it; else the LinkedIn link, with a warning.
   {
-    const { popup, page } = await popupFor(context, worker, id, fixtureUrl("linkedin-signed-in"));
+    const { popup, page } = await rig.open(fixtureUrl("linkedin-signed-in"));
     card.check("LinkedIn linking to Greenhouse: saves the company's posting, says where it was found", (await popup.getByText("Saves the company's own posting on Greenhouse, not the LinkedIn copy.").count()) === 1 && (await popup.locator("#what").textContent()) === "LinkedIn · Job posting");
     await shot(popup, "08-linkedin-to-greenhouse");
     await Promise.all([popup.close(), page.close()]);
-    const view = await popupFor(context, worker, id, fixtureUrl("linkedin-view"));
+    const view = await rig.open(fixtureUrl("linkedin-view"));
     card.check("LinkedIn without a company link: warns it saves the LinkedIn link", (await view.popup.getByText(/saves the LinkedIn one/).count()) === 1 && (await view.popup.getByLabel("Company").inputValue()) === "d1g1t");
     await shot(view.popup, "09-linkedin-warning");
     await Promise.all([view.popup.close(), view.page.close()]);
@@ -241,24 +138,24 @@ async function main() {
 
   // A careers page with Greenhouse embedded: the embed's job.
   {
-    const { popup, page } = await popupFor(context, worker, id, fixtureUrl("careers-embed"));
+    const { popup, page } = await rig.open(fixtureUrl("careers-embed"));
     card.check("careers page with an embedded Greenhouse form: read as that job's form", (await popup.locator("#what").textContent()) === "Greenhouse · Application form");
     await Promise.all([popup.close(), page.close()]);
   }
 
   // Lists and pages that aren't jobs.
   for (const [name, expected] of [["greenhouse-board", "This page lists many jobs"], ["lever-board", "This page lists many jobs"], ["itemlist", "This page lists many jobs"]] as const) {
-    const { popup, page, tabId } = await popupFor(context, worker, id, fixtureUrl(name));
+    const { popup, page, tabId } = await rig.open(fixtureUrl(name));
     card.check(`${name}: a list, says to open one job`, (await popup.getByText(expected).count()) === 1 && (await popup.getByRole("button").count()) === 1);
     if (name === "greenhouse-board") {
-      card.check("badge on a list: ≡", (await badgeOf(worker, tabId)) === "≡", await badgeOf(worker, tabId));
+      card.check("badge on a list: ≡", (await rig.badgeOf(tabId)) === "≡", await rig.badgeOf(tabId));
       await shot(popup, "10-list");
     }
     await Promise.all([popup.close(), page.close()]);
   }
   {
-    const { popup, page, tabId } = await popupFor(context, worker, id, fixtureUrl("not-a-job"));
-    card.check("an article: not a job page, with Save it anyway", (await popup.getByText("This page doesn't look like a job posting.").count()) === 1 && (await badgeOf(worker, tabId)) === "");
+    const { popup, page, tabId } = await rig.open(fixtureUrl("not-a-job"));
+    card.check("an article: not a job page, with Save it anyway", (await popup.getByText("This page doesn't look like a job posting.").count()) === 1 && (await rig.badgeOf(tabId)) === "");
     await shot(popup, "11-not-a-job");
     await popup.getByRole("button", { name: "Save it anyway" }).click();
     await popup.getByRole("button", { name: "Save to Dossier" }).waitFor();
@@ -268,30 +165,26 @@ async function main() {
 
   // Failures say what to do.
   {
-    await context.newPage().then(async (scratch) => {
-      await scratch.goto(`chrome-extension://${id}/options.html`);
-      await scratch.evaluate(() => (globalThis as unknown as { chrome: { storage: { local: { set(v: object): Promise<void> } } } }).chrome.storage.local.set({ server: "http://localhost:3199" }));
-      await scratch.close();
-    });
-    const { popup, page } = await popupFor(context, worker, id, fixtureUrl("ashby-posting"));
+    await rig.setServer("http://localhost:3199");
+    const { popup, page } = await rig.open(fixtureUrl("ashby-posting"));
     card.check("Dossier down: says it can't reach it, offers Try again", (await popup.getByText(/Can't reach Dossier at http:\/\/localhost:3199/).count()) === 1 && (await popup.getByRole("button", { name: "Try again" }).count()) === 1);
     await shot(popup, "12-offline");
     await Promise.all([popup.close(), page.close()]);
   }
   {
     // A token revoked in Dossier.
-    await connect(context, id, BASE, token);
+    await rig.connect(BASE, token);
     await app.goto(`${BASE}/settings?section=extension`);
     await app.getByRole("button", { name: /^Revoke Save check/ }).first().click();
     await app.waitForTimeout(1000);
-    const { popup, page } = await popupFor(context, worker, id, fixtureUrl("ashby-posting"));
+    const { popup, page } = await rig.open(fixtureUrl("ashby-posting"));
     card.check("revoked token: says so, sends to Options", (await popup.getByRole("button", { name: "Open Options" }).count()) === 1, (await popup.locator(".notice").textContent()) ?? "");
     await shot(popup, "13-revoked");
     await Promise.all([popup.close(), page.close()]);
   }
 
   if (LIVE) {
-    await connect(context, id, BASE, await makeToken(app, `Save check live ${Date.now()}`));
+    await rig.connect(BASE, await makeToken(app, `Save check live ${Date.now()}`));
     // The pages the fixtures came from, as they are today: read the same way, or the fixtures are stale.
     const live: [string, string, RegExp][] = [
       ["https://job-boards.greenhouse.io/gitlab/jobs/8638232002", "Greenhouse · Application form", /GitLab/],
@@ -301,8 +194,8 @@ async function main() {
       ["https://job-boards.greenhouse.io/gitlab", "Greenhouse · Job list", /./],
     ];
     for (const [url, what, company] of live) {
-      pages.delete(url);
-      const { popup, page } = await popupFor(context, worker, id, url);
+      rig.pages.delete(url);
+      const { popup, page } = await rig.open(url);
       const said = (await popup.locator("#what").textContent()) ?? "";
       const companyField = popup.getByLabel("Company");
       const read = (await companyField.count()) ? await companyField.inputValue() : (await popup.locator(".card .muted").first().textContent().catch(() => "")) ?? "";

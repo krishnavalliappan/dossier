@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { saveFromExtension } from "@/lib/ext/applications";
+import { saveFromExtension, suggestApplications } from "@/lib/ext/applications";
 import { ExtError, extRoute } from "@/lib/ext/route";
 
 const body = z.strictObject({
@@ -12,6 +12,12 @@ const body = z.strictObject({
   location: z.string().max(500).optional(),
   description: z.string().max(200_000).optional(),
   tailor: z.boolean().optional(),
+});
+
+/** Fork: open applications whose company or title has ?q= (the newest Drafts without it), to link an application form to. */
+export const GET = extRoute(["applications:read"], async (request) => {
+  const query = (request.nextUrl.searchParams.get("q") ?? "").slice(0, 200);
+  return NextResponse.json({ applications: await suggestApplications(query) });
 });
 
 /** Fork: saves the job the extension is on; the same job again returns the first application (200 instead of 201). */
