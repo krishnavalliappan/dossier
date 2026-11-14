@@ -22,6 +22,7 @@ export function TailoredResume({
   sections,
   renderUnit,
   atsOrder,
+  fit,
 }: {
   resume: DocumentData;
   profile: ProfileData;
@@ -37,6 +38,8 @@ export function TailoredResume({
   renderUnit?: UnitRenderer;
   /** Fork: the main column first in reading order (Settings → ATS reading order). */
   atsOrder?: boolean;
+  /** Fork: squeezed this many steps to fit one page (the extension's PDF). */
+  fit?: number;
 }) {
   return (
     <ResumeDocument
@@ -51,6 +54,7 @@ export function TailoredResume({
       sections={sections}
       renderUnit={renderUnit}
       atsOrder={atsOrder}
+      fit={fit}
     />
   );
 }
