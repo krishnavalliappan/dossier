@@ -109,6 +109,14 @@ describe("proxy", () => {
     expect((await proxy(request("/api/mcpx"))).status).toBe(401);
   });
 
+  // Fork: the browser extension's API checks its own token (src/lib/ext/route.ts).
+  it("lets the extension's API through without a session, and nothing that only looks like it", async () => {
+    for (const path of ["/api/ext/ping", "/api/ext/applications/lookup"]) {
+      expect((await proxy(request(path))).headers.get("x-middleware-next"), path).toBe("1");
+    }
+    expect((await proxy(request("/api/extra"))).status).toBe(401);
+  });
+
   it("answers API requests with 401 JSON instead of a redirect", async () => {
     const response = await proxy(request("/api/pdf/1"));
     expect(response.status).toBe(401);

@@ -1093,3 +1093,23 @@ model BankClaimBlock {
   phrase    String   @id
   createdAt DateTime @default(now())
 }
+
+// ─── Fork: browser extension (src/lib/ext) ───────────────────────────────────
+
+/// A personal access token for the browser extension: only /api/ext/* accepts
+/// it. The token itself is shown once and never stored, only its HMAC.
+model ExtToken {
+  id         String    @id @default(cuid())
+  name       String
+  /// HMAC-SHA256 of the token (key derived from DOSSIER_SECRET), base64url.
+  hash       String    @unique
+  /// The token's first characters, to tell tokens apart in Settings.
+  prefix     String
+  /// Space-separated: "applications:read applications:write resume:read".
+  scopes     String
+  /// The password's fingerprint when it was made: a new password revokes it.
+  pwd        String
+  lastUsedAt DateTime?
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+}
