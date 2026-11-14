@@ -84,6 +84,23 @@ export async function findApplications(url: string): Promise<ExtApplication[]> {
   return views.sort((a, b) => Number(a.archived) - Number(b.archived));
 }
 
+const words = (text: string) => text.toLowerCase().normalize("NFKD").replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+
+/**
+ * Open applications to link an application form to, when the form's page
+ * wasn't found (a Workday form for a job saved from LinkedIn): those whose
+ * company or title has `query`'s words, newest first; the newest Drafts when
+ * there's no query. At most `limit`.
+ */
+export async function suggestApplications(query: string, limit = 5): Promise<ExtApplication[]> {
+  const rows = await prisma.application.findMany({ where: { archivedAt: null }, select: SELECT, orderBy: { updatedAt: "desc" }, take: 200 });
+  const wanted = words(query);
+  const matching = wanted
+    ? rows.filter((row) => ` ${words(`${row.company} ${row.title} ${row.role}`)} `.includes(` ${wanted} `))
+    : rows.filter((row) => row.status === ApplicationStatus.DRAFT);
+  return Promise.all(matching.slice(0, limit).map(view));
+}
+
 export async function getApplication(id: string): Promise<ExtApplication> {
   const row = await prisma.application.findUnique({ where: { id }, select: SELECT });
   if (!row) throw new ExtError("not-found", "That application is no longer in Dossier.");

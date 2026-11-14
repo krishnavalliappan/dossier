@@ -388,3 +388,17 @@ button:disabled {
   gap: 8px;
   margin-top: 8px;
 }
+
+.suggest {
+  display: grid;
+  gap: 8px;
+}
+.suggest .label {
+  color: var(--color-muted);
+  font-size: var(--text-label);
+  font-weight: 500;
+}
+#attached {
+  display: grid;
+  gap: 4px;
+}

@@ -26,6 +26,21 @@ Use the demo profile. **Never submit an application. Never open Easy Apply.**
 - [ ] The badge: + before saving, ✓ after, ≡ on lists.
 - [ ] Light and dark (system setting): readable, focus rings visible.
 
+## Attach (Step 8): live forms, demo profile, never submit
+
+Only on sites the user approved for a live run (listed and asked first).
+
+- [ ] Greenhouse form with a resume already attached (Simplify): Attach replaces it; the form shows our file name only.
+- [ ] Greenhouse cover letter field gets the letter.
+- [ ] Greenhouse's own resume parsing / autofill still runs after Attach.
+- [ ] Lever /apply: resume attached; Lever's "Analyzing resume" runs.
+- [ ] Ashby: resume attached.
+- [ ] Workday (after "Apply" → "Apply manually"): one file in the drop zone, not two.
+- [ ] Company careers page with an embedded Greenhouse form: Chrome asks for access to Greenhouse once; attached inside the frame.
+- [ ] Attach twice: still one file.
+- [ ] Mark applied: Sent in Dossier; the reminder to submit yourself is shown first.
+- [ ] Nothing was submitted (no confirmation page, no email from the company).
+
 ## Failures
 
 - [ ] Dossier stopped: "Can't reach Dossier at …", Try again works once it's back.

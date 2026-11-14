@@ -31,7 +31,12 @@ export type ChromeApi = {
     onActivated: Event<(info: { tabId: number }) => void>;
   };
   scripting: {
-    executeScript<T>(injection: { target: { tabId: number; frameIds?: number[]; allFrames?: boolean }; func: () => T; world?: "ISOLATED" | "MAIN" }): Promise<{ frameId: number; result?: T }[]>;
+    executeScript<Args extends unknown[], T>(injection: {
+      target: { tabId: number; frameIds?: number[]; allFrames?: boolean };
+      func: (...args: Args) => T;
+      args?: Args;
+      world?: "ISOLATED" | "MAIN";
+    }): Promise<{ frameId: number; result?: T }[]>;
   };
   action: {
     setBadgeText(details: { tabId?: number; text: string }): Promise<void>;

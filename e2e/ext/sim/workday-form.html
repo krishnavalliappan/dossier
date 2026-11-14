@@ -1,0 +1,16 @@
+<!doctype html>
+<!-- Simulated Workday application step (test only): a drop zone over a hidden input. -->
+<html lang="en"><head><meta charset="utf-8"><title>Backend Developer</title>
+<script type="application/ld+json">{"@context":"http://schema.org","@type":"JobPosting","title":"Backend Developer","hiringOrganization":{"@type":"Organization","name":"Acme Sim Workday"},"jobLocation":{"@type":"Place","address":{"@type":"PostalAddress","addressLocality":"Toronto","addressCountry":"Canada"}},"description":"Backend services in Python."}</script>
+</head>
+<body><main>
+<h2 data-automation-id="jobPostingHeader">Backend Developer</h2>
+<form>
+  <div data-automation-id="file-upload-drop-zone" data-upload style="border:2px dashed #999;padding:24px">
+    <p>Drop files here</p><button type="button">Select files</button>
+    <input data-automation-id="file-upload-input-ref" type="file" style="display:none">
+    <ul class="files"></ul>
+  </div>
+  <button type="submit">Next</button>
+</form>
+</main><script src="/__sim/upload-ui.js"></script></body></html>

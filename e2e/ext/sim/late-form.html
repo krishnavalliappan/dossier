@@ -1,0 +1,11 @@
+<!doctype html>
+<!-- Simulated posting whose form shows only after "Apply for this job" (test only). -->
+<html lang="en"><head><meta charset="utf-8"><title>Acme Sim - Data Engineer</title></head>
+<body><main>
+<div class="posting-headline"><h2>Data Engineer</h2></div><div class="posting-categories"><div class="location">Toronto, ON</div></div>
+<button id="show-form" type="button">Apply for this job</button>
+<template id="late-form"><form id="late">
+  <div data-upload><label for="resume-upload-input">Resume/CV</label><input id="resume-upload-input" name="resume" type="file"><ul class="files"></ul></div>
+  <button type="submit">Submit application</button>
+</form></template>
+</main><script src="/__sim/upload-ui.js"></script></body></html>

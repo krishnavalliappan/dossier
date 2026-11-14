@@ -20,7 +20,7 @@ vi.mock("@/lib/jobs/runner", async (original) => ({
 }));
 const prisma = () => db.client!;
 
-const { findApplications, linkUrl, markApplied, saveFromExtension } = await import("./applications");
+const { findApplications, linkUrl, markApplied, saveFromExtension, suggestApplications } = await import("./applications");
 
 const POSTING = "https://job-boards.greenhouse.io/acme/jobs/4012345007";
 
@@ -121,6 +121,20 @@ describe("linkUrl", () => {
     await expect(linkUrl(two.application.id, POSTING)).rejects.toMatchObject({ code: "conflict" });
     await expect(linkUrl(one.application.id, "https://jobs.lever.co/acme")).rejects.toMatchObject({ code: "bad-request" });
     await expect(linkUrl("missing", POSTING)).rejects.toMatchObject({ code: "not-found" });
+  });
+});
+
+describe("suggestApplications", () => {
+  it("finds open applications by the company's or title's words, newest first; the newest Drafts without a query", async () => {
+    const acme = await saveFromExtension({ url: POSTING, company: "Acme Corp", title: "Backend Developer" });
+    const other = await saveFromExtension({ url: "https://jobs.lever.co/acme/1b2c3d4e-0000-4abc-8def-1234567890ab", company: "Acmeist", title: "Designer" });
+    const archived = await prisma().application.create({ data: { title: "Old · Acme Corp", company: "Acme Corp", archivedAt: new Date() } });
+    expect((await suggestApplications("acme corp")).map((app) => app.id)).toEqual([acme.application.id]);
+    expect((await suggestApplications("ACME")).map((app) => app.id)).toEqual([acme.application.id]);
+    expect((await suggestApplications("")).map((app) => app.id)).toEqual([other.application.id, acme.application.id]);
+    await markApplied(other.application.id);
+    expect((await suggestApplications("")).map((app) => app.id)).toEqual([acme.application.id]);
+    expect((await suggestApplications("Acme Corp")).map((app) => app.id)).not.toContain(archived.id);
   });
 });
 

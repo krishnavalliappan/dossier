@@ -8,8 +8,9 @@
 // touched.
 
 import { classify, type Classified } from "../../src/lib/ext/page/classify";
+import { attach, describeAttached, scanTab, target, type Uploads } from "./attach";
 import { readPage, type PageRead } from "../../src/lib/ext/page/read-page";
-import { ApiError, getConfig, json, type Config, type ExtApplication, type Lookup, type SaveResult } from "./api";
+import { ApiError, getConfig, json, originPattern, type Config, type ExtApplication, type Lookup, type SaveResult } from "./api";
 import { chrome, type Tab } from "./chrome";
 import { gear, h, mark } from "./dom";
 import type { Message } from "./background";
@@ -50,7 +51,13 @@ function showError(subtitle: string, error: unknown, retry: () => void) {
 
 const STATUS_COLORS: Record<string, string> = { DRAFT: "draft", SENT: "sent", SCREENING: "screening", INTERVIEW: "interview", OFFER: "offer", ACCEPTED: "accepted", REJECTED: "rejected", DECLINED: "declined" };
 
-type Ctx = { config: Config; tab: Tab & { id: number }; page: PageRead | null; classified: Classified };
+type Ctx = { config: Config; tab: Tab & { id: number }; page: PageRead | null; classified: Classified; uploads: Uploads };
+
+type Notice = { text: string; tone: "success" | "warning" };
+/** After attaching: what happened, file by file. */
+type AttachedView = { lines: string[]; ok: boolean };
+
+const refreshBadge = (ctx: Ctx) => void chrome.runtime.sendMessage({ type: "refresh", tabId: ctx.tab.id, url: ctx.tab.url ?? ctx.classified.url } satisfies Message).catch(() => {});
 
 async function openInDossier(ctx: Ctx, app: ExtApplication) {
   await chrome.tabs.create({ url: `${ctx.config.server}${app.path}` });
@@ -64,26 +71,90 @@ const DOC_TEXT = {
 
 let polling = 0;
 
-function showSaved(ctx: Ctx, app: ExtApplication, notice?: { text: string; tone: "success" | "warning" }) {
+const attachLabel = (letter: boolean) => (letter ? "Attach resume and cover letter" : "Attach resume");
+
+function showSaved(ctx: Ctx, app: ExtApplication, options: { notice?: Notice; attached?: AttachedView } = {}) {
   window.clearTimeout(polling);
+  const { notice, attached } = options;
+  const subtitle = describe(ctx.classified);
+  const where = target(ctx.uploads);
+  // A form embedded from another site (Greenhouse in a careers page) is only readable once Chrome allows that site: asked on Attach.
+  const embedded = (ctx.page?.embeds ?? []).map((url) => originPattern(new URL(url).origin));
+  const formPage = !ctx.uploads.blocked && (where !== null || embedded.length > 0);
+  // A form that isn't there yet: it shows after a click, or is the posting's Apply away.
+  const lookAgain = !formPage && !ctx.uploads.blocked && (ctx.classified.kind === "form" || (ctx.classified.kind === "posting" && ctx.classified.parsed?.ats !== undefined));
+  const letter = where?.letter !== undefined && app.letter === "ready";
+
   const docs = (["resume", "letter"] as const).map((doc) =>
     h("li", { class: `doc ${app[doc]}` }, h("span", { class: "doc-icon", "aria-hidden": "true" }, app[doc] === "ready" ? "✓" : app[doc] === "writing" ? "" : app[doc] === "failed" ? "!" : "–"), DOC_TEXT[doc][app[doc]]),
   );
-  const canTailor = app.resume === "missing" || app.resume === "failed" || app.letter === "failed";
   const tailor = async (button: HTMLButtonElement) => {
-    button.disabled = true;
-    button.textContent = "Starting…";
+    busy(button, "Starting…");
     try {
       const answer = await json<{ tailoring: "started" | "no-ai"; application: ExtApplication }>(ctx.config, `/applications/${app.id}/tailor`, { method: "POST" });
-      if (answer.tailoring === "no-ai") showSaved(ctx, answer.application, { text: "Dossier has no AI set up, so it can't write them. Set it up in Dossier's Settings.", tone: "warning" });
+      if (answer.tailoring === "no-ai") showSaved(ctx, answer.application, { notice: { text: "Dossier has no AI set up, so it can't write them. Set it up in Dossier's Settings.", tone: "warning" } });
       else showSaved(ctx, answer.application);
     } catch (error) {
-      showError(describe(ctx.classified), error, () => showSaved(ctx, app));
+      showError(subtitle, error, () => showSaved(ctx, app));
     }
   };
+  const doAttach = (button: HTMLButtonElement) => {
+    // Asked first, while the click still counts as one: Chrome only asks on a click.
+    const allowed = embedded.length ? chrome.permissions.request({ origins: embedded }) : Promise.resolve(true);
+    void (async () => {
+      busy(button, "Getting the PDF…");
+      try {
+        if (!(await allowed)) throw new ApiError("no-access", "The form is on another site, embedded in this page. Allow the extension to reach it to attach the resume.");
+        ctx.uploads = await scanTab(ctx.tab.id);
+        const now = target(ctx.uploads);
+        if (!now) throw new ApiError("no-field", "There's no resume upload on this page any more. If it shows after a click, click it, then open the extension again.");
+        const result = await attach(ctx.config, ctx.tab.id, app, now, () => (button.textContent = "Still getting the PDF…"));
+        showSaved(ctx, app, { attached: describeAttached(result) });
+      } catch (error) {
+        showError(subtitle, error, () => showSaved(ctx, app));
+      }
+    })();
+  };
+  const markApplied = async (button: HTMLButtonElement) => {
+    busy(button, "Marking…");
+    try {
+      const { application } = await json<{ application: ExtApplication; changed: boolean }>(ctx.config, `/applications/${app.id}/applied`, { method: "POST" });
+      refreshBadge(ctx);
+      showSaved(ctx, application, { notice: { text: `Marked as applied. It's ${application.statusLabel} in Dossier.`, tone: "success" } });
+    } catch (error) {
+      showError(subtitle, error, () => showSaved(ctx, app, options));
+    }
+  };
+  const click = (fn: (button: HTMLButtonElement) => unknown) => (event: Event) => void fn(event.currentTarget as HTMLButtonElement);
+  const button = (label: string, kind: "primary" | "secondary", onclick: EventListener, id?: string, disabled = false) => h("button", { class: kind, type: "button", id, disabled, onclick }, label);
+  const open = (kind: "primary" | "secondary") => button("Open in Dossier", kind, () => void openInDossier(ctx, app), kind === "primary" ? "main-action" : undefined);
+  const tailorButton = (kind: "primary" | "secondary") => button(app.resume === "missing" ? "Write now" : "Try again", kind, click(tailor), kind === "primary" ? "main-action" : undefined);
+  const draft = app.status === "DRAFT";
+
+  // One main action for where things are: attach, then mark applied; else write; else open.
+  let actions: Node[];
+  let hint: string | null = null;
+  if (formPage && attached) {
+    actions = draft ? [button("Mark applied", "primary", click(markApplied), "main-action"), button("Attach again", "secondary", click(doAttach))] : [open("primary"), button("Attach again", "secondary", click(doAttach))];
+    if (draft) hint = "Check the form and submit it yourself, then mark it applied.";
+  } else if (formPage && app.resume === "ready") {
+    actions = [button(attachLabel(letter), "primary", click(doAttach), "main-action"), open("secondary")];
+    if (where?.letter && app.letter !== "ready") hint = "The form also takes a cover letter, but Dossier doesn't have one ready.";
+  } else if (formPage && app.resume === "writing") {
+    actions = [button(attachLabel(false), "primary", () => {}, "main-action", true), open("secondary")];
+    hint = "Attach is ready once the resume is.";
+  } else if (formPage) {
+    actions = [tailorButton("primary"), open("secondary")];
+  } else {
+    actions = [open("primary"), ...(app.resume === "missing" || app.resume === "failed" || app.letter === "failed" ? [tailorButton("secondary")] : [])];
+  }
+  if (lookAgain)
+    hint = ctx.classified.kind === "form" ? "No resume upload on this page yet. If it shows after a click, click it, then look again." : "To attach the resume, open the application form, then look again.";
+
   frame(
-    describe(ctx.classified),
+    subtitle,
     notice ? h("div", { class: `notice ${notice.tone}`, role: "status" }, notice.text) : null,
+    attached ? h("div", { class: `notice ${attached.ok ? "success" : "warning"}`, role: "status", id: "attached" }, ...attached.lines.map((line) => h("p", {}, line))) : null,
     h(
       "section",
       { class: "card", "aria-label": "Saved application" },
@@ -92,14 +163,14 @@ function showSaved(ctx: Ctx, app: ExtApplication, notice?: { text: string; tone:
       h("p", { class: "status" }, h("span", { class: "dot", style: `background: var(--color-status-${STATUS_COLORS[app.status] ?? "draft"})`, "aria-hidden": "true" }), app.statusLabel, app.archived ? " · Archived" : ""),
       h("ul", { class: "docs", "aria-live": "polite" }, ...docs),
     ),
-    h(
-      "div",
-      { class: "actions" },
-      h("button", { class: "primary", type: "button", id: "open", onclick: () => void openInDossier(ctx, app) }, "Open in Dossier"),
-      canTailor ? h("button", { class: "secondary", type: "button", onclick: (event: Event) => void tailor(event.currentTarget as HTMLButtonElement) }, app.resume === "missing" ? "Write now" : "Try again") : null,
-    ),
+    hint ? h("p", { class: "hint" }, hint) : null,
+    h("div", { class: "actions" }, ...actions, lookAgain ? button("Look again", "secondary", click(async (b) => {
+      busy(b, "Looking…");
+      ctx.uploads = await scanTab(ctx.tab.id);
+      showSaved(ctx, app, options);
+    })) : null),
   );
-  document.getElementById("open")?.focus();
+  document.getElementById("main-action")?.focus();
   // While they're being written, show when they're done (and then stop saying they're being written).
   if (app.resume === "writing" || app.letter === "writing") {
     polling = window.setTimeout(async () => {
@@ -107,12 +178,17 @@ function showSaved(ctx: Ctx, app: ExtApplication, notice?: { text: string; tone:
         const { application } = await json<{ application: ExtApplication }>(ctx.config, `/applications/${app.id}`);
         const done = application.resume !== "writing" && application.letter !== "writing";
         // Done: the card says they're ready, so the notice only says what was saved.
-        showSaved(ctx, application, done && notice ? { text: notice.text.replace(/ Writing the resume and cover letter\.$/, ""), tone: notice.tone } : notice);
+        showSaved(ctx, application, { ...options, notice: done && notice ? { text: notice.text.replace(/ Writing the resume and cover letter\.$/, ""), tone: notice.tone } : notice });
       } catch {
         // Keep what's shown; the next open asks again.
       }
     }, 3000);
   }
+}
+
+function busy(button: HTMLButtonElement, label: string) {
+  button.disabled = true;
+  button.textContent = label;
 }
 
 function showPick(ctx: Ctx, matches: ExtApplication[]) {
@@ -159,8 +235,60 @@ async function showNew(ctx: Ctx, options: { forced?: boolean } = {}) {
     event.preventDefault();
     void save(ctx, form);
   });
-  frame(describe(classified), form);
+  const suggestions = h("div", { id: "suggestions" });
+  frame(describe(classified), suggestions, form);
   document.getElementById("save")?.focus();
+  if (classified.kind === "form") void suggest(ctx, suggestions);
+}
+
+/**
+ * On an application form Dossier doesn't know (a Workday form for a job saved
+ * from LinkedIn): the saved jobs it may be, to link it to one instead of
+ * saving the job twice.
+ */
+async function suggest(ctx: Ctx, into: HTMLElement) {
+  const company = ctx.page?.company ?? "";
+  try {
+    let { applications } = await json<{ applications: ExtApplication[] }>(ctx.config, `/applications?q=${encodeURIComponent(company)}`);
+    if (applications.length === 0 && company) ({ applications } = await json<{ applications: ExtApplication[] }>(ctx.config, "/applications?q="));
+    if (applications.length === 0) return;
+    const link = async (app: ExtApplication, button: HTMLButtonElement) => {
+      busy(button, "Linking…");
+      try {
+        const { application } = await json<{ application: ExtApplication }>(ctx.config, `/applications/${app.id}/urls`, { method: "POST", body: JSON.stringify({ url: ctx.classified.url }) });
+        refreshBadge(ctx);
+        showSaved(ctx, application, { notice: { text: "Linked this form to the saved job.", tone: "success" } });
+      } catch (error) {
+        showError(describe(ctx.classified), error, () => void showNew(ctx));
+      }
+    };
+    into.replaceChildren(
+      h(
+        "section",
+        { class: "suggest", "aria-label": "Saved jobs this may be" },
+        h("p", { class: "label" }, "Saved it from another page?"),
+        h(
+          "ul",
+          { class: "picker" },
+          ...applications.slice(0, 3).map((app) =>
+            h(
+              "li",
+              {},
+              h(
+                "button",
+                { class: "row", type: "button", onclick: (event: Event) => void link(app, event.currentTarget as HTMLButtonElement) },
+                h("span", { class: "title" }, app.title),
+                h("span", { class: "muted" }, `${app.statusLabel} · Link this form to it`),
+              ),
+            ),
+          ),
+        ),
+        h("p", { class: "label" }, "Or save it as a new job:"),
+      ),
+    );
+  } catch {
+    // Suggestions are a convenience: saving still works without them.
+  }
 }
 
 async function save(ctx: Ctx, form: HTMLFormElement) {
@@ -184,13 +312,13 @@ async function save(ctx: Ctx, form: HTMLFormElement) {
         tailor,
       }),
     });
-    void chrome.runtime.sendMessage({ type: "refresh", tabId: ctx.tab.id, url: ctx.tab.url ?? ctx.classified.url } satisfies Message).catch(() => {});
+    refreshBadge(ctx);
     const notice = result.existing
       ? { text: "This job was already saved.", tone: "success" as const }
       : result.tailoring === "no-ai"
         ? { text: "Saved as a Draft. Dossier has no AI set up, so it can't write the resume yet.", tone: "warning" as const }
         : { text: result.tailoring === "started" ? "Saved as a Draft. Writing the resume and cover letter." : "Saved as a Draft.", tone: "success" as const };
-    showSaved(ctx, result.application, notice);
+    showSaved(ctx, result.application, { notice });
   } catch (error) {
     if (error instanceof ApiError && !error.reconnect) {
       // Keep what was typed: say what went wrong above the button, and let them try again.
@@ -241,7 +369,9 @@ async function start() {
   }
   const page = await readTab(tab.id);
   const classified = classify(page?.url ?? tab.url, page);
-  const ctx: Ctx = { config, tab: { ...tab, id: tab.id }, page, classified };
+  // The application form's file fields, in every frame: where a saved job's resume goes.
+  const uploads: Uploads = classified.kind === "form" || classified.kind === "posting" ? await scanTab(tab.id) : { blocked: false, frames: [] };
+  const ctx: Ctx = { config, tab: { ...tab, id: tab.id }, page, classified, uploads };
 
   if (classified.kind === "list") {
     frame(describe(classified), h("p", {}, "This page lists many jobs. Open one to save it."));
