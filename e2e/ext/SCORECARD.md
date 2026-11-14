@@ -93,3 +93,27 @@ Live run against the dev server with a fake AI (`e2e/ext/api-check.ts`), demo pr
 | Mark applied: Draft → Sent, once; one further along left alone | ✅ | Never moves a later status back |
 | Job saved again after its application was deleted | ✅ | Orphan links released |
 | Unknown application 404, garbage body 400, with messages | ✅ | |
+
+## Step 7: extension, recognize + save (`feat/ext-save`)
+
+`e2e/ext/save-check.ts`: the built extension in Chromium against the dev server (fake AI), pages served from committed fixtures at their real addresses; `LIVE=1` also reads the live pages. 33/33.
+
+| Scenario | Result | Fixed along the way |
+|---|---|---|
+| Installing opens Options; not connected → one "Connect to Dossier" button | ✅ | Options took over the first tab: the rig waits for it |
+| Options: bad address, bad token refused before sending; connects and names the token's permissions; keeps the origin, not a typed path | ✅ | |
+| Greenhouse posting with its form: "Greenhouse · Application form", title/company/location read | ✅ | Company and location came out empty: board-specific selectors and the tab title |
+| Save is focused (Alt+Shift+D, Enter) → Draft, documents shown being written, then ready | ✅ | The "Writing…" notice stayed after they were ready |
+| Same job again → shown as saved, no second save | ✅ | |
+| Saved without tailoring → "No resume yet", Write now | ✅ | |
+| Lever /apply finds the job saved from its posting; badge ⇪ | ✅ | |
+| LinkedIn whose Apply links to Greenhouse → saves the company's posting, header still "LinkedIn" | ✅ | Header named Greenhouse |
+| LinkedIn guest view (no company link) → LinkedIn link saved with a warning; company "d1g1t" | ✅ | Company read as "LinkedIn" (og:site_name) |
+| Company careers page embedding Greenhouse → that job's form | ✅ | |
+| Greenhouse board, Lever board, JSON-LD ItemList → "lists many jobs"; badge ≡ | ✅ | |
+| Wikipedia "Résumé" article → not a job, Save it anyway with a warning | ✅ | Read as a job from its words: now needs an Apply control or an upload too |
+| Dossier down → "Can't reach Dossier at …", Try again | ✅ | |
+| Revoked token → says so, Open Options | ✅ | |
+| Live: GitLab (Greenhouse), Palantir (Lever), Linear (Ashby), LinkedIn guest view, GitLab board | ✅ | |
+| Saved from an apply form (no description) → Dossier reads the posting itself when tailoring | ✅ (db test) | |
+| readPage runs injected (no bundler helpers) | ✅ (unit + build check) | tsx's keepNames `__name` would have broken it |

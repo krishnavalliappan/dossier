@@ -15,6 +15,7 @@ import { defineJob, findUnfinishedJobs, startJob } from "@/lib/jobs/runner";
 import { writeDocumentJob, writeDocumentJobKey, type WritableKind } from "@/lib/jobs/write-document";
 import { prisma } from "@/lib/prisma";
 import { loadProfile } from "@/lib/profile-data";
+import { fetchPosting } from "@/lib/posting-fetch";
 import { loadSettings } from "@/lib/settings-data";
 
 export const extTailorJobKey = (applicationId: string) => `ext-tailor:${applicationId}`;
@@ -27,9 +28,18 @@ export const extTailorJob = defineJob({
     await step("Reading the posting");
     const application = await prisma.application.findUnique({
       where: { id: applicationId },
-      select: { postingText: true, extracted: true, company: true, role: true, title: true, location: true, documents: { select: { kind: true } } },
+      select: { postingText: true, postingUrl: true, extracted: true, company: true, role: true, title: true, location: true, documents: { select: { kind: true } } },
     });
     if (!application) return { applicationId, writing: [] };
+
+    // Saved from an application form, which doesn't say what the job is: read the posting itself (public addresses only).
+    if (!application.postingText.trim() && application.postingUrl) {
+      const fetched = await fetchPosting(application.postingUrl);
+      if (fetched.ok) {
+        application.postingText = fetched.text;
+        await prisma.application.update({ where: { id: applicationId }, data: { postingText: fetched.text } });
+      }
+    }
 
     if (!application.extracted && application.postingText.trim()) {
       const [provider, options, profile] = await Promise.all([getAiProvider(), loadTaskOptions(), loadProfile()]);
